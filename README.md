@@ -9,7 +9,6 @@
 - **Markdown 解析**：支持代码块、表格、列表等完整格式渲染。
 - **推理过程展示**：支持 DeepSeek 等模型的思考过程折叠/展开显示。
 - **上下文感知**：选中文本后右键或使用快捷键，自动将选中文本作为上下文发送给 AI。
-- **高兼容性**：解决 Electron 环境下的焦点丢失、按键拦截等常见问题。
 
 ## 安装步骤
 
@@ -18,12 +17,12 @@
 将整个 `plugin` 文件夹复制到 Typora 的 resources 目录：
 
 ```text
-C:\Program Files\Typora\resources\plugin\
+安装目录/Typora/resources/
 ```
 
 ### 2. 修改 window.html
 
-打开 `C:\Program Files\Typora\resources\window.html`，在 `</body>` 标签之前添加：
+打开 `安装目录/Typora/resources/window.html`，在 `</body>` 标签之前添加：
 
 ```html
 <script src="./plugin/index.js"></script>
@@ -95,6 +94,10 @@ window.AI_CHAT_CONFIG = {
 2. 检查网络连接。
 3. 确认 API 端点是否支持流式输出（stream: true）。
 
+## 致谢
+
+[typora_plugin](https://github.com/obgnail/typora_plugin)
+
 ## 许可证
 
-MIT License
+GNU General Public License v3.0
