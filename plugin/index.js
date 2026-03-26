@@ -88,54 +88,61 @@
         /**
          * Load third-party dependencies
          */
-        loadDependencies() {
+        async loadDependencies() {
+            await this.loadScript('marked.min.js', 'marked');
+        }
+
+        /**
+         * Helper to load a script
+         */
+        loadScript(filename, globalVar) {
             return new Promise(resolve => {
-                if (window.marked) {
+                if (window[globalVar]) {
                     return resolve();
                 }
                 
-                let markedUrl = './plugin/marked.min.js';
+                let scriptUrl = `./plugin/${filename}`;
                 if (currentScriptSrc) {
-                    markedUrl = currentScriptSrc.replace('index.js', 'marked.min.js');
+                    scriptUrl = currentScriptSrc.replace('index.js', filename);
                 }
                 
                 if (window.require) {
                     try {
                         const fs = window.require('fs');
                         const path = window.require('path');
-                        let markedPath = '';
+                        let scriptPath = '';
                         
                         if (currentScriptSrc && currentScriptSrc.startsWith('file://')) {
-                            markedPath = decodeURI(currentScriptSrc.replace('file:///', '').replace('file://', '').replace('index.js', 'marked.min.js'));
-                            if (markedPath.includes(':') && markedPath.startsWith('/')) {
-                                markedPath = markedPath.substring(1);
+                            scriptPath = decodeURI(currentScriptSrc.replace('file:///', '').replace('file://', '').replace('index.js', filename));
+                            if (scriptPath.includes(':') && scriptPath.startsWith('/')) {
+                                scriptPath = scriptPath.substring(1);
                             }
                         } else {
                             const resourcesPath = path.dirname(window.process.mainModule.filename);
-                            markedPath = path.join(resourcesPath, 'plugin', 'marked.min.js');
+                            scriptPath = path.join(resourcesPath, 'plugin', filename);
                         }
                         
-                        if (fs.existsSync(markedPath)) {
-                            const markedContent = fs.readFileSync(markedPath, 'utf-8');
+                        if (fs.existsSync(scriptPath)) {
+                            const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
                             const scriptEl = document.createElement('script');
-                            scriptEl.textContent = markedContent;
+                            scriptEl.textContent = scriptContent;
                             document.head.appendChild(scriptEl);
-                            console.log('[AIChat] 通过 fs 成功读取 marked.js');
+                            console.log(`[AIChat] 通过 fs 成功读取 ${filename}`);
                             return resolve();
                         }
                     } catch (e) {
-                        console.warn('[AIChat] fs 读取 marked.js 失败，尝试 script 标签加载:', e);
+                        console.warn(`[AIChat] fs 读取 ${filename} 失败，尝试 script 标签加载:`, e);
                     }
                 }
 
                 const script = document.createElement('script');
-                script.src = markedUrl;
+                script.src = scriptUrl;
                 script.onload = () => {
-                    console.log('[AIChat] 通过 script 标签成功读取 marked.js');
+                    console.log(`[AIChat] 通过 script 标签成功读取 ${filename}`);
                     resolve();
                 };
                 script.onerror = () => {
-                    console.warn('[AIChat] 无法加载 marked.js:', markedUrl);
+                    console.warn(`[AIChat] 无法加载 ${filename}:`, scriptUrl);
                     resolve();
                 };
                 document.head.appendChild(script);
@@ -1388,21 +1395,10 @@
         }
 
         /**
-         * Parse markdown to HTML, using Typora's built-in parser if available
+         * Parse markdown to HTML using marked.js
          */
         parseMarkdown(text) {
             if (!text) return '';
-            
-            // 优先尝试使用 Typora 内置的 Markdown 解析器
-            if (window.File && window.File.editor && window.File.editor.markdownToHTML) {
-                try {
-                    // Typora 的 markdownToHTML 可能会返回包含额外包装的 HTML
-                    const html = window.File.editor.markdownToHTML(text);
-                    if (html) return html;
-                } catch (e) {
-                    console.warn('[AIChat] Typora markdown parser failed, falling back to custom parser', e);
-                }
-            }
 
             // 尝试使用 marked.js
             if (window.marked) {
@@ -1413,57 +1409,12 @@
                         return window.marked(text);
                     }
                 } catch (e) {
-                    console.warn('[AIChat] marked.js parser failed, falling back to custom parser', e);
+                    console.warn('[AIChat] marked.js parser failed', e);
                 }
             }
 
-            // 降级方案：自定义的简单 Markdown 解析器
-            let html = text
-                .replace(/&/g, '&')
-                .replace(/</g, '<')
-                .replace(/>/g, '>');
-            
-            // 处理代码块 (支持多行和语言高亮)
-            html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-                return `<pre style="background: var(--ac-surface); padding: 12px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--ac-border); margin: 10px 0;"><code class="language-${lang}" style="font-family: 'Roboto Mono', Consolas, monospace; font-size: 0.9em; border: none; padding: 0; background: transparent;">${code}</code></pre>`;
-            });
-            
-            // 处理行内代码
-            html = html.replace(/`([^`]+)`/g, '<code style="background: var(--ac-surface); padding: 2px 6px; border-radius: 4px; font-family: \'Roboto Mono\', Consolas, monospace; font-size: 0.9em; border: 1px solid var(--ac-border);">$1</code>');
-            
-            // 处理粗体和斜体
-            html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-            html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-            
-            // 处理标题
-            html = html.replace(/^### (.*$)/gim, '<h3 style="margin-top: 16px; margin-bottom: 8px; font-size: 1.1em;">$1</h3>');
-            html = html.replace(/^## (.*$)/gim, '<h2 style="margin-top: 20px; margin-bottom: 10px; font-size: 1.3em; border-bottom: 1px solid var(--ac-border); padding-bottom: 4px;">$1</h2>');
-            html = html.replace(/^# (.*$)/gim, '<h1 style="margin-top: 24px; margin-bottom: 12px; font-size: 1.5em; border-bottom: 1px solid var(--ac-border); padding-bottom: 6px;">$1</h1>');
-            
-            // 处理无序列表
-            html = html.replace(/^\s*[-*+] (.*$)/gim, '<li style="margin-left: 20px; list-style-type: disc;">$1</li>');
-            // 将连续的 <li> 包装在 <ul> 中
-            html = html.replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul style="margin: 8px 0; padding-left: 20px;">$&</ul>');
-            
-            // 处理有序列表
-            html = html.replace(/^\s*\d+\. (.*$)/gim, '<li style="margin-left: 20px; list-style-type: decimal;">$1</li>');
-            // 将连续的 <li> 包装在 <ol> 中 (注意这里可能会和无序列表冲突，简单处理)
-            html = html.replace(/(<li[^>]*list-style-type: decimal[^>]*>.*<\/li>\n?)+/g, '<ol style="margin: 8px 0; padding-left: 20px;">$&</ol>');
-
-            // 处理引用块
-            html = html.replace(/^> (.*$)/gim, '<blockquote style="border-left: 4px solid var(--ac-border); padding-left: 12px; margin: 10px 0; color: var(--ac-text-muted); background: rgba(0,0,0,0.02); padding-top: 4px; padding-bottom: 4px;">$1</blockquote>');
-            
-            // 处理段落换行 (将连续的换行替换为 <br>)
-            // 注意：不要在 pre/code/ul/ol/li/h1/h2/h3/blockquote 内部替换换行
-            const blocks = html.split(/(<pre[\s\S]*?<\/pre>|<ul[\s\S]*?<\/ul>|<ol[\s\S]*?<\/ol>|<blockquote[\s\S]*?<\/blockquote>|<h[1-3][\s\S]*?<\/h[1-3]>)/i);
-            for (let i = 0; i < blocks.length; i++) {
-                if (i % 2 === 0) { // 文本部分
-                    blocks[i] = blocks[i].replace(/\n/g, '<br>');
-                }
-            }
-            html = blocks.join('');
-
-            return html;
+            // 降级方案：直接返回转义后的文本
+            return this.escapeHtml(text).replace(/\n/g, '<br>');
         }
     }
 
