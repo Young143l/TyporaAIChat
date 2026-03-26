@@ -49,6 +49,7 @@
             try {
                 console.log('[AIChat] 开始初始化...');
                 await this.waitForTypora();
+                await this.loadDependencies();
                 await this.loadConfig();
                 this.loadHistory();
                 this.createUI();
@@ -81,6 +82,63 @@
                     }
                 };
                 check();
+            });
+        }
+
+        /**
+         * Load third-party dependencies
+         */
+        loadDependencies() {
+            return new Promise(resolve => {
+                if (window.marked) {
+                    return resolve();
+                }
+                
+                let markedUrl = './plugin/marked.min.js';
+                if (currentScriptSrc) {
+                    markedUrl = currentScriptSrc.replace('index.js', 'marked.min.js');
+                }
+                
+                if (window.require) {
+                    try {
+                        const fs = window.require('fs');
+                        const path = window.require('path');
+                        let markedPath = '';
+                        
+                        if (currentScriptSrc && currentScriptSrc.startsWith('file://')) {
+                            markedPath = decodeURI(currentScriptSrc.replace('file:///', '').replace('file://', '').replace('index.js', 'marked.min.js'));
+                            if (markedPath.includes(':') && markedPath.startsWith('/')) {
+                                markedPath = markedPath.substring(1);
+                            }
+                        } else {
+                            const resourcesPath = path.dirname(window.process.mainModule.filename);
+                            markedPath = path.join(resourcesPath, 'plugin', 'marked.min.js');
+                        }
+                        
+                        if (fs.existsSync(markedPath)) {
+                            const markedContent = fs.readFileSync(markedPath, 'utf-8');
+                            const scriptEl = document.createElement('script');
+                            scriptEl.textContent = markedContent;
+                            document.head.appendChild(scriptEl);
+                            console.log('[AIChat] 通过 fs 成功读取 marked.js');
+                            return resolve();
+                        }
+                    } catch (e) {
+                        console.warn('[AIChat] fs 读取 marked.js 失败，尝试 script 标签加载:', e);
+                    }
+                }
+
+                const script = document.createElement('script');
+                script.src = markedUrl;
+                script.onload = () => {
+                    console.log('[AIChat] 通过 script 标签成功读取 marked.js');
+                    resolve();
+                };
+                script.onerror = () => {
+                    console.warn('[AIChat] 无法加载 marked.js:', markedUrl);
+                    resolve();
+                };
+                document.head.appendChild(script);
             });
         }
 
@@ -1343,6 +1401,19 @@
                     if (html) return html;
                 } catch (e) {
                     console.warn('[AIChat] Typora markdown parser failed, falling back to custom parser', e);
+                }
+            }
+
+            // 尝试使用 marked.js
+            if (window.marked) {
+                try {
+                    if (typeof window.marked.parse === 'function') {
+                        return window.marked.parse(text);
+                    } else if (typeof window.marked === 'function') {
+                        return window.marked(text);
+                    }
+                } catch (e) {
+                    console.warn('[AIChat] marked.js parser failed, falling back to custom parser', e);
                 }
             }
 
