@@ -17,7 +17,7 @@
                     api_key: '',
                     model: 'deepseek-reasoner',
                     temperature: 0.7,
-                    max_tokens: 2000
+                    max_tokens: 16000
                 },
                 hotkey: 'ctrl+shift+a'
             };
@@ -1346,31 +1346,48 @@
         }
 
         /**
-         * Execute the fetch request to the API
+         * Execute the fetch request to the API with timeout
          */
         async fetchChatCompletion(apiKey) {
-            const response = await fetch(`${this.config.api.base_url}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                signal: this.state.abortController.signal,
-                body: JSON.stringify({
-                    model: this.config.api.model,
-                    messages: this.state.messages.map(m => ({ role: m.role, content: m.content })),
-                    temperature: this.config.api.temperature,
-                    max_tokens: this.config.api.max_tokens,
-                    stream: true
-                })
-            });
+            // 设置 10 分钟超时（针对需要长时间思考的模型如 deepseek-reasoner）
+            const TIMEOUT_MS = 600000;
+            
+            const timeoutId = setTimeout(() => {
+                if (this.state.abortController) {
+                    console.log('[AIChat] 请求超时，正在取消...');
+                    this.state.abortController.abort();
+                }
+            }, TIMEOUT_MS);
 
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`HTTP Error ${response.status}: ${errText}`);
+            try {
+                const response = await fetch(`${this.config.api.base_url}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    signal: this.state.abortController.signal,
+                    body: JSON.stringify({
+                        model: this.config.api.model,
+                        messages: this.state.messages.map(m => ({ role: m.role, content: m.content })),
+                        temperature: this.config.api.temperature,
+                        max_tokens: this.config.api.max_tokens,
+                        stream: true
+                    })
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP Error ${response.status}: ${errText}`);
+                }
+
+                return response;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                throw error;
             }
-
-            return response;
         }
 
         /**
